@@ -3,9 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>at% → wt% Calculator</title>
+<title>at% → wt% Calculator & Density</title>
 
-<!-- Google Material Design CSS -->
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
 
 <style>
@@ -38,7 +37,8 @@
     table {
         border-collapse: collapse;
         width: 100%;
-        min-width: 650px;
+        /* 由於欄位增加，將最小寬度調高 */
+        min-width: 750px; 
     }
 
     th, td {
@@ -47,7 +47,25 @@
         border-bottom: 1px solid #ddd;
     }
 
-    select, input[type=number] {
+    /* Composition 欄位專用樣式 */
+    .comp-column {
+        width: 120px;
+        min-width: 120px;
+    }
+
+    /* at% 欄位專用樣式 */
+    .at-column {
+        width: 80px;
+        min-width: 80px;
+    }
+    
+    /* Density, wt%, Vol% 欄位樣式 */
+    .numeric-column {
+        width: 80px;
+        min-width: 80px;
+    }
+    
+    select, input[type=number], input[type=text] {
         width: 100%;
         padding: 10px;
         border-radius: 6px;
@@ -96,6 +114,38 @@
         text-align: right;
     }
 
+    /* 字串生成區塊樣式 */
+    .string-generator {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #ccc;
+    }
+
+    .result-box {
+        margin-top: 15px;
+        padding: 10px;
+        background-color: #e6e6fa; /* 淺紫色強調結果 */
+        border-radius: 6px;
+        font-size: 18px;
+        font-weight: 700;
+        text-align: center;
+    }
+    
+    .string-output {
+        margin-top: 5px;
+        padding: 10px;
+        background-color: #e9e9e9;
+        border-radius: 6px;
+        font-size: 16px;
+        word-break: break-all;
+        font-weight: 500;
+    }
+    
+    .string-label {
+        margin-top: 15px;
+        font-weight: 500;
+    }
+
     @media (max-width: 600px) {
         button { width: 100%; }
     }
@@ -104,14 +154,17 @@
 <body>
 
 <div class="container">
-    <h2>Metal Oxide Composition Calculator（at% → wt%）</h2>
+    <h2>Metal Oxide Composition & Density Calculator</h2>
 
     <div class="table-container">
     <table id="elementsTable">
         <tr>
-            <th>Composition</th>
-            <th>at%</th>
-            <th>wt%</th>
+            <th class="comp-column">Composition</th> 
+            <th class="at-column">at%</th>
+            <th class="numeric-column">Atomic W</th>
+            <th class="numeric-column">Density (g/cm³)</th>
+            <th class="numeric-column">wt%</th>
+            <th class="numeric-column">Vol%</th>
             <th>Delete</th>
         </tr>
     </table>
@@ -119,71 +172,115 @@
 
     <button class="btn-primary" onclick="addRow()">Add Composition</button>
     <button class="btn-normalize" onclick="autoNormalize()">Normalize to 100%</button>
-    <button class="btn-primary" onclick="calculate()">Calculate wt%</button>
+    <button class="btn-primary" onclick="calculateAndGenerate()">Calculate All</button> 
 
     <div class="total-box">
         Total at%: <span id="totalAt">0</span>%
     </div>
-</div>
+    
+    <div class="result-box">
+        理論密度 (Theoretical Density): <span id="theoreticalDensity"> - </span> g/cm³
+    </div>
+
+    <div class="string-generator">
+        <h3>💬 生成的成分字串</h3>
+        
+        <p class="string-label">at% 字串:</p>
+        <div class="string-output" id="atStringOutput">請先計算</div>
+        
+        <p class="string-label">wt% 字串:</p>
+        <div class="string-output" id="wtStringOutput">請先計算</div>
+    </div>
+    </div>
 
 <script>
-// Atomic weights
-const atomicWeights = {
-    "Al": 26.9815,
-    "B": 10.81,
-    "Co": 58.9332,
-    "Cr": 51.9961,
-    "Fe": 55.845,
-    "Mo": 95.96,
-    "Ni": 58.6934,
-    "Pt": 195.084,
-    "Ru": 101.07,
-    "Ti": 47.867,
-    "W": 183.84,
-    "B2O3": 69.618,
-    "CoO": 74.933,
-    "Cr2O3": 151.99,
-    "MgO": 40.304,
-    "SiO2": 60.084,
-    "TiO": 63.866,
-    "TiO2": 79.866,
-    "BN": 24.817,
+// 元素數據結構：{ "元素": { AW: 原子量, D: 密度 } }
+const elementData = {
+    "Al": { AW: 26.9815, D: 2.7 },
+    "B": { AW: 10.81, D: 2.46 },
+    "Co": { AW: 58.9332, D: 8.9 },
+    "Cr": { AW: 51.9961, D: 7.19 },
+    "Fe": { AW: 55.845, D: 7.87 },
+    "Mo": { AW: 95.96, D: 10.2 },
+    "Ni": { AW: 58.6934, D: 8.9 },
+    "Pt": { AW: 195.084, D: 21.45 },
+    "Ru": { AW: 101.07, D: 12.37 },
+    "Ti": { AW: 47.867, D: 4.506 },
+    "W": { AW: 183.84, D: 19.25 },
+    "B2O3": { AW: 69.618, D: 2.55 },
+    "CoO": { AW: 74.933, D: 6.45 },
+    "Cr2O3": { AW: 151.99, D: 5.21 },
+    "MgO": { AW: 40.304, D: 3.58 },
+    "SiO2": { AW: 60.84, D: 2.3 },
+    "TiO": { AW: 63.866, D: 4.95 },
+    "TiO2": { AW: 79.866, D: 4.23 },
+    "BN": { AW: 24.817, D: 3.45 },
 };
 
 function addRow() {
     let table = document.getElementById("elementsTable");
     let row = table.insertRow(-1);
 
-    // Composition
-    let cell1 = row.insertCell(0);
+    // 0. Composition
+    let cell0 = row.insertCell(0);
+    cell0.classList.add("comp-column");
     let select = document.createElement("select");
-    for (let key in atomicWeights) {
+    for (let key in elementData) {
         let opt = document.createElement("option");
         opt.value = key;
         opt.innerHTML = key;
         select.appendChild(opt);
     }
-    cell1.appendChild(select);
-
-    // at%
-    let cell2 = row.insertCell(1);
+    // 設置 onchange 事件，以便選中不同成分時，Atomic W 和 Density 自動更新
+    select.onchange = () => {
+        const elm = select.value;
+        const data = elementData[elm];
+        
+        // 更新 Atomic W 欄位 (第 2 個 cell)
+        row.cells[2].innerHTML = data.AW.toFixed(4);
+        // 更新 Density 欄位 (第 3 個 cell)
+        row.cells[3].innerHTML = data.D.toFixed(3);
+        
+        // 重新計算 (可選，避免每次選單變動都重算)
+        // calculateAndGenerate(); 
+    };
+    cell0.appendChild(select);
+    
+    // 1. at%
+    let cell1 = row.insertCell(1);
+    cell1.classList.add("at-column"); 
     let input = document.createElement("input");
     input.type = "number";
     input.value = 0;
     input.min = 0;
     input.oninput = updateTotalAt;
-    cell2.appendChild(input);
+    cell1.appendChild(input);
 
-    // wt%
-    row.insertCell(2).innerHTML = "-";
+    // 2. Atomic W (只讀)
+    let cell2 = row.insertCell(2);
+    cell2.classList.add("numeric-column");
+    // 預設值
+    cell2.innerHTML = elementData[select.value].AW.toFixed(4);
 
-    // delete
-    let cell4 = row.insertCell(3);
+    // 3. Density (只讀)
+    let cell3 = row.insertCell(3);
+    cell3.classList.add("numeric-column");
+    // 預設值
+    cell3.innerHTML = elementData[select.value].D.toFixed(3);
+
+    // 4. wt% (結果)
+    row.insertCell(4).innerHTML = "-";
+
+    // 5. Vol% (結果)
+    row.insertCell(5).innerHTML = "-";
+
+    // 6. Delete
+    let cell6 = row.insertCell(6);
     let del = document.createElement("button");
     del.className = "btn-delete";
     del.innerHTML = "X";
     del.onclick = () => { row.remove(); updateTotalAt(); };
-    cell4.appendChild(del);
+    cell6.appendChild(del);
 }
 
 function updateTotalAt() {
@@ -191,6 +288,7 @@ function updateTotalAt() {
     let total = 0;
 
     for (let i = 1; i < rows.length; i++) {
+        // at% 欄位在第 1 個 cell
         let v = parseFloat(rows[i].cells[1].children[0].value);
         total += isNaN(v) ? 0 : v;
     }
@@ -206,6 +304,7 @@ function autoNormalize() {
     let rows = document.getElementById("elementsTable").rows;
 
     for (let i = 1; i < rows.length; i++) {
+        // at% 欄位在第 1 個 cell
         let input = rows[i].cells[1].children[0];
         let val = parseFloat(input.value);
         input.value = ((val / total) * 100).toFixed(3);
@@ -214,24 +313,115 @@ function autoNormalize() {
     updateTotalAt();
 }
 
-function calculate() {
+/**
+ * 核心功能：計算 wt%, Vol%，理論密度，同時生成 at% 和 wt% 字串。
+ * 理論密度計算公式 (Volume Averaging):
+ * ρ_theoretical = 1 / [ Σ (at% * AW / (AW * ρ)) ] = 1 / [ Σ (at% / ρ) ] (需使用正規化 at%)
+ * 此處我們使用 wt% 加權平均：1 / [ Σ (wt% / ρ) ]
+ */
+function calculateAndGenerate() {
     let rows = document.getElementById("elementsTable").rows;
-
-    let nums = [], total = 0;
-    for (let i = 1; i < rows.length; i++) {
-        let elm = rows[i].cells[0].children[0].value;
-        let at = parseFloat(rows[i].cells[1].children[0].value);
-        let AW = atomicWeights[elm];
-        let v = at * AW;
-        nums.push(v);
-        total += v;
+    if (rows.length <= 1) { 
+        document.getElementById("theoreticalDensity").innerHTML = " - ";
+        document.getElementById("atStringOutput").innerHTML = "請新增成分。";
+        document.getElementById("wtStringOutput").innerHTML = "請新增成分。";
+        return;
     }
 
+    const precision = 3; 
+
+    let totalAtTimesAW = 0;
+    let compositions = []; // 儲存 { element, at, AW, D }
+
+    // 1. 收集數據並計算 Σ (at% * AW)
     for (let i = 1; i < rows.length; i++) {
-        let wt = (nums[i - 1] / total) * 100;
-        rows[i].cells[2].innerHTML = wt.toFixed(3) + "%";
+        const elm = rows[i].cells[0].children[0].value;
+        const at = parseFloat(rows[i].cells[1].children[0].value);
+        
+        if (isNaN(at) || at < 0 || !(elm in elementData)) {
+             document.getElementById("theoreticalDensity").innerHTML = "錯誤！";
+             document.getElementById("atStringOutput").innerHTML = "錯誤：無效的 at% 或成分。";
+             document.getElementById("wtStringOutput").innerHTML = "錯誤：無效的 at% 或成分。";
+             rows[i].cells[4].innerHTML = "錯誤"; // wt%
+             rows[i].cells[5].innerHTML = "錯誤"; // Vol%
+             return;
+        }
+        
+        const data = elementData[elm];
+        const atTimesAW = at * data.AW;
+        
+        compositions.push({
+            element: elm,
+            at: at,
+            AW: data.AW,
+            D: data.D,
+            atTimesAW: atTimesAW // 分子
+        });
+        totalAtTimesAW += atTimesAW;
     }
+    
+    if (totalAtTimesAW === 0) {
+        document.getElementById("theoreticalDensity").innerHTML = "0";
+        document.getElementById("atStringOutput").innerHTML = "at% * AW 總和為零。";
+        document.getElementById("wtStringOutput").innerHTML = "at% * AW 總和為零。";
+        return;
+    }
+
+    // 2. 計算 wt%, Vol%, 理論密度
+    let sumWtDivDensity = 0; // Σ (wt% / ρ)
+    let sumVol = 0; // Σ (at% * AW / D) / totalAW (vol% 計算分子)
+    
+    let atStringParts = [];
+    let wtStringParts = [];
+    
+    for (let i = 0; i < compositions.length; i++) {
+        const comp = compositions[i];
+
+        // 計算 wt%
+        const wt = (comp.atTimesAW / totalAtTimesAW) * 100;
+        
+        // 理論密度所需的分子 (wt% / ρ)
+        const wtDivDensity = wt / comp.D;
+        sumWtDivDensity += wtDivDensity;
+
+        // Vol% 所需的分子 (at * AW / D)
+        const atAWDivD = comp.atTimesAW / comp.D;
+        sumVol += atAWDivD; // 這是計算 Vol% 的基礎
+
+        // 更新表格中的 wt% 欄位 (第 4 個 cell)
+        rows[i + 1].cells[4].innerHTML = wt.toFixed(precision) + "%";
+        
+        // 生成 at% 字串
+        atStringParts.push(`${comp.at.toFixed(precision).replace(/\.?0+$/, '')}${comp.element}`);
+
+        // 生成 wt% 字串
+        wtStringParts.push(`${wt.toFixed(precision).replace(/\.?0+$/, '')}${comp.element}`);
+    }
+
+    // 3. 計算 Vol% (Vol% = [ (at * AW / D) / Σ(at * AW / D) ] * 100)
+    for (let i = 0; i < compositions.length; i++) {
+        const comp = compositions[i];
+        const atAWDivD = comp.atTimesAW / comp.D;
+        
+        const vol = (atAWDivD / sumVol) * 100;
+        
+        // 更新表格中的 Vol% 欄位 (第 5 個 cell)
+        rows[i + 1].cells[5].innerHTML = vol.toFixed(precision) + "%";
+    }
+
+    // 4. 計算最終理論密度 (wt% 加權平均法: ρ_th = 1 / Σ (wt% / ρ))
+    const theoreticalDensity = 1 / (sumWtDivDensity / 100); // 因為 sumWtDivDensity 是用百分比 (0-100) 計算的，需除以 100 正規化
+    
+    // 5. 輸出結果
+    document.getElementById("theoreticalDensity").innerHTML = theoreticalDensity.toFixed(3);
+    document.getElementById("atStringOutput").innerHTML = `${atStringParts.join('-')} at%`;
+    document.getElementById("wtStringOutput").innerHTML = `${wtStringParts.join('-')} wt%`;
+    
+    // 如果您需要儲存功能，可以在這裡呼叫 saveData()
 }
+
+// 確保網頁載入時至少有一行
+addRow();
 </script>
 
 </body>

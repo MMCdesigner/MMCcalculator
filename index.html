@@ -177,7 +177,26 @@
     <div class="total-box">
         Total at%: <span id="totalAt">0</span>%
     </div>
-    
+    <h3>Sample Geometry</h3>
+
+<label>直徑 D (mm): </label>
+<input type="number" id="diameter" value="20">
+
+<br><br>
+
+<label>厚度 t (mm): </label>
+<input type="number" id="thickness" value="2">
+
+<br><br>
+
+<label>理論密度 ρ (g/cm³): </label>
+<input type="number" id="density" value="4.5">
+
+<br><br>
+
+<p>計算總重量： <span id="sampleWeight">-</span></p>
+
+<button class="btn-primary" onclick="calculateElementMass()">計算各元素所需重量</button>
     <div class="result-box">
         理論密度 (Theoretical Density): <span id="theoreticalDensity"> - </span> g/cm³
     </div>
@@ -318,7 +337,51 @@ function autoNormalize() {
 
     updateTotalAt();
 }
+// 計算圓形樣品重量（依密度）
+function calculateSampleWeight() {
+    let D = parseFloat(document.getElementById("diameter").value);
+    let t = parseFloat(document.getElementById("thickness").value);
+    let rho = parseFloat(document.getElementById("density").value);
 
+    if (isNaN(D) || isNaN(t) || isNaN(rho)) {
+        alert("請輸入直徑、厚度與密度！");
+        return;
+    }
+
+    // mm → cm³：體積 = π * (D/2)^2 * t * 0.001
+    let volume_cm3 = Math.PI * Math.pow(D / 2, 2) * t * 0.001;
+
+    // 總重量（g）
+    let totalWeight = volume_cm3 * rho;
+
+    document.getElementById("sampleWeight").innerText = totalWeight.toFixed(4) + " g";
+
+    return totalWeight;
+}
+
+// 計算每個元素所需重量
+function calculateElementMass() {
+    let totalWeight = calculateSampleWeight();
+    if (!totalWeight) return;
+
+    let table = document.getElementById("elementsTable");
+    let rows = table.rows;
+
+    let result = "";
+
+    for (let i = 1; i < rows.length; i++) {
+        let element = rows[i].cells[0].children[0].value;
+        let wtStr = rows[i].cells[2].innerHTML.replace("%", "");
+        let wt = parseFloat(wtStr);
+
+        if (!isNaN(wt)) {
+            let mass = totalWeight * (wt / 100);
+            result += `${element}: ${mass.toFixed(4)} g\n`;
+        }
+    }
+
+    alert("各元素所需重量：\n\n" + result);
+}
 /**
  * 核心功能：計算 wt%, Vol%，理論密度，同時生成 at% 和 wt% 字串。
  * 理論密度計算公式 (Volume Averaging):
